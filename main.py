@@ -5,26 +5,22 @@ import os
 app = Flask(__name__)
 
 # ── ENV змінні ────────────────────────────────────────────────────
-TOKEN    = os.environ.get("BOT_TOKEN")   # Telegram bot token
-CHAT_ID  = os.environ.get("CHAT_ID")    # Telegram chat id
-SECRET   = os.environ.get("SECRET", "")  # Секрет для захисту webhook
-DEPOSIT  = float(os.environ.get("DEPOSIT", "10000"))  # Депозит в USD (міняти в .env)
+TOKEN    = os.environ.get("BOT_TOKEN")
+CHAT_ID  = os.environ.get("CHAT_ID")
+SECRET   = os.environ.get("SECRET", "")
+DEPOSIT  = float(os.environ.get("DEPOSIT", "10000"))
 
 RISK_PCT  = 1.0   # % ризику на угоду
-PIP_VALUE = 10.0  # $10 за 1 лот на EURUSD (стандарт)
+PIP_VALUE = 10.0  # $10 за 1 лот на EURUSD
 
 # ── Розрахунок лотності ───────────────────────────────────────────
 def calc_lot(entry: float, sl: float) -> float:
-    """
-    Лот = (Депозит * Ризик%) / (SL в піпсах * PipValue)
-    """
-    sl_pips = abs(entry - sl) * 10000  # конвертуємо в піпси
+    sl_pips = abs(entry - sl) * 10000
     if sl_pips == 0:
         return 0.01
     risk_usd = DEPOSIT * RISK_PCT / 100
     lot = risk_usd / (sl_pips * PIP_VALUE)
-    lot = max(0.01, round(lot, 2))
-    return lot
+    return max(0.01, round(lot, 2))
 
 # ── Telegram відправка ────────────────────────────────────────────
 def send_telegram(msg: str):
@@ -45,34 +41,43 @@ def webhook():
     try:
         d = data if isinstance(data, dict) else {}
 
-        # Перевірка секрету
         if SECRET and d.get('secret') != SECRET:
             return {"status": "unauthorized"}, 401
 
-        pair  = d.get('pair',  'EURUSD')
-        dr    = d.get('dir',   '?')       # LONG або SHORT
-        entry = float(d.get('entry', 0))
-        sl    = float(d.get('sl',    0))
-        tp    = float(d.get('tp',    0))
-        tf    = d.get('tf',    'M15')
-        tm    = d.get('time',  '')
+        pair   = d.get('pair',  'EURUSD')
+        dr     = d.get('dir',   '?')
+        entry  = float(d.get('entry', 0))
+        sl     = float(d.get('sl',    0))
+        tp1    = float(d.get('tp1',   0))
+        tp2    = float(d.get('tp2',   0))
+        score  = d.get('score', '?')
+        tf     = d.get('tf',    'H1')
+        tm     = d.get('time',  '')
 
         lot = calc_lot(entry, sl)
+        risk_usd = round(DEPOSIT * RISK_PCT / 100, 2)
+
+        r = abs(entry - sl)
+        rr = round(abs(tp2 - entry) / r, 1) if r > 0 else 0
 
         direction_icon = '🟢 LONG' if dr == 'LONG' else '🔴 SHORT'
 
         msg = (
             f"⚡ <b>SMC СИГНАЛ</b>\n"
-            f"{'─' * 22}\n"
+            f"{'─' * 24}\n"
             f"{direction_icon}  |  <b>{pair}</b>  |  {tf}\n"
-            f"{'─' * 22}\n"
-            f"📍 Entry   : <code>{entry:.5f}</code>\n"
-            f"🛑 SL      : <code>{sl:.5f}</code>\n"
-            f"🎯 TP      : <code>{tp:.5f}</code>\n"
-            f"📦 Lot     : <code>{lot:.2f}</code>\n"
-            f"💰 Risk    : <code>{DEPOSIT * RISK_PCT / 100:.2f} USD  ({RISK_PCT}%)</code>\n"
-            f"🏦 Deposit : <code>{DEPOSIT:.0f} USD</code>\n"
-            f"{'─' * 22}\n"
+            f"{'─' * 24}\n"
+            f"📍 <b>Entry</b>  : <code>{entry:.5f}</code>\n"
+            f"🛑 <b>SL</b>     : <code>{sl:.5f}</code>\n"
+            f"🎯 <b>TP1</b>    : <code>{tp1:.5f}</code>\n"
+            f"🏆 <b>TP2</b>    : <code>{tp2:.5f}</code>\n"
+            f"{'─' * 24}\n"
+            f"📦 <b>Лот</b>    : <code>{lot:.2f}</code>\n"
+            f"💰 <b>Ризик</b>  : <code>{risk_usd:.2f} USD  ({RISK_PCT}%)</code>\n"
+            f"🏦 <b>Депозит</b>: <code>{DEPOSIT:.0f} USD</code>\n"
+            f"📊 <b>RR</b>     : <code>1:{rr}</code>\n"
+            f"⭐ <b>Score</b>  : <code>{score}</code>\n"
+            f"{'─' * 24}\n"
             f"🕐 {tm}"
         )
 
@@ -83,7 +88,6 @@ def webhook():
         send_telegram(f"❌ Webhook помилка: {e}")
         return {"status": "error", "msg": str(e)}, 500
 
-# ── Health check ──────────────────────────────────────────────────
 @app.route('/', methods=['GET'])
 def index():
     return {"status": "running", "deposit": DEPOSIT}, 200
