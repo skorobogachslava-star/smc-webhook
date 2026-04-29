@@ -11,13 +11,12 @@ DEPOSIT  = float(os.environ.get("DEPOSIT", "10000"))
 
 RISK_PCT = 1.0
 
-# Pip value по парах
 PIP_VALUES = {
     "EURUSD": 10.0,
     "GBPUSD": 10.0,
     "AUDUSD": 10.0,
     "USDJPY": 9.1,
-    "XAUUSD": 1.0,   # Gold: $1 per 0.01 lot per point
+    "XAUUSD": 1.0,
 }
 
 PIP_SIZES = {
@@ -58,21 +57,11 @@ def webhook():
         if SECRET and d.get('secret') != SECRET:
             return {"status": "unauthorized"}, 401
 
+        # Ігноруємо всі не-торгові повідомлення
         msg_type = d.get('type', 'SIGNAL')
+        if msg_type != 'SIGNAL':
+            return {"status": "ignored"}, 200
 
-        # ── Лондонська сесія ──────────────────────────────────
-        if msg_type == 'SESSION':
-            send_telegram(
-                "🌍 <b>ЛОНДОНСЬКА СЕСІЯ ВІДКРИТА</b>\n"
-                "────────────────────────\n"
-                "🕗 08:00 UTC — ринок активний\n"
-                "Очікуємо SMC сигнали на:\n"
-                "• EURUSD • GBPUSD\n"
-                "• AUDUSD • USDJPY • XAUUSD"
-            )
-            return {"status": "ok", "type": "session"}, 200
-
-        # ── Торговий сигнал ───────────────────────────────────
         pair   = d.get('pair',  'EURUSD')
         dr     = d.get('dir',   '?')
         entry  = float(d.get('entry', 0))
@@ -90,7 +79,6 @@ def webhook():
 
         direction_icon = '🟢 LONG' if dr == 'LONG' else '🔴 SHORT'
 
-        # Іконка пари
         pair_icons = {
             "EURUSD": "🇪🇺",
             "GBPUSD": "🇬🇧",
